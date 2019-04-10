@@ -17,13 +17,14 @@
 
 package co.rsk.bitcoinj.core;
 
-import com.google.common.base.*;
-import co.rsk.bitcoinj.store.*;
-import co.rsk.bitcoinj.utils.*;
+import co.rsk.bitcoinj.store.BlockStoreException;
+import co.rsk.bitcoinj.store.BtcBlockStore;
 import co.rsk.bitcoinj.wallet.Wallet;
-import org.slf4j.*;
+import com.google.common.base.Preconditions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import javax.annotation.*;
+import javax.annotation.Nullable;
 import java.util.*;
 
 import static com.google.common.base.Preconditions.*;
@@ -128,8 +129,6 @@ public abstract class BtcAbstractBlockChain {
     private double falsePositiveTrend;
     private double previousFalsePositiveRate;
 
-    private final VersionTally versionTally;
-
     /** See {@link #BtcAbstractBlockChain(Context, BtcBlockStore)} */
     public BtcAbstractBlockChain(NetworkParameters params,
                                  BtcBlockStore blockStore) throws BlockStoreException {
@@ -145,9 +144,6 @@ public abstract class BtcAbstractBlockChain {
         chainHead = blockStore.getChainHead();
         log.debug("chain head is at height {}:\n{}", chainHead.getHeight(), chainHead.getHeader());
         this.params = context.getParams();
-
-        this.versionTally = new VersionTally(context.getParams());
-        this.versionTally.initialize(blockStore, chainHead);
     }
 
     /**
@@ -387,17 +383,12 @@ public abstract class BtcAbstractBlockChain {
             // stopping addition of new v2/3 blocks to the tip of the chain.
             if (block.getVersion() == BtcBlock.BLOCK_VERSION_BIP34
                 || block.getVersion() == BtcBlock.BLOCK_VERSION_BIP66) {
-                final Integer count = versionTally.getCountAtOrAbove(block.getVersion() + 1);
-                if (count != null
-                    && count >= params.getMajorityRejectBlockOutdated()) {
-                    throw new VerificationException.BlockVersionOutOfDate(block.getVersion());
-                }
+                throw new VerificationException.BlockVersionOutOfDate(block.getVersion());
             }
 
             // This block connects to the best known block, it is a normal continuation of the system.
             StoredBlock newStoredBlock = addToBlockStore(storedPrev,
                     block.transactions == null ? block : block.cloneAsHeader());
-            versionTally.add(block.getVersion());
             setChainHead(newStoredBlock);
             log.debug("Chain is now {} blocks high, running listeners", newStoredBlock.getHeight());
         } else {
@@ -699,9 +690,5 @@ public abstract class BtcAbstractBlockChain {
         falsePositiveRate = 0;
         falsePositiveTrend = 0;
         previousFalsePositiveRate = 0;
-    }
-
-    protected VersionTally getVersionTally() {
-        return versionTally;
     }
 }
